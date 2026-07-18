@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: analytics_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: my_super_secret_password_123
+      POSTGRES_DB: analytics_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: analytics_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  postgres_data:
