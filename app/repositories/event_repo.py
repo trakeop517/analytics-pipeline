@@ -25,5 +25,5 @@ class EventRepository:
         if not events_list:
             return
         stmt = insert(EventModel).values(events_list)
-        stmt = stmt.on_conflict_do_nothing(index_elements=["external_id"])
+        stmt = stmt.on_conflict_do_nothing(index_elements=["source","external_id"])
         await self.session.execute(stmt)

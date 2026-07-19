@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.db.session import async_engine, async_session_factory
 from app.models.event import Base, EventModel
-
+from app.api.monitoring import router as monitoring
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI):
     logger.info("Все воркеры остановлены.")
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
-
+app.include_router(monitoring)
 @app.get("/health")
 async def health():
     return {"queue_size": app_state["queue"].qsize() if app_state["queue"] else 0}
