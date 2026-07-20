@@ -8,6 +8,7 @@ import redis.asyncio as aioredis
 from app.db.session import async_session_factory
 from app.repositories.event_repo import EventRepository
 from datetime import datetime
+from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [Воркер %(name)s] - %(levelname)s - %(message)s")
 logger = logging.getLogger("PipelineWorker")
@@ -19,7 +20,6 @@ BACKOFF_FACTOR = 2
 NUM_WORKERS = 8          
 
 async def send_to_dlq(worker_id: int, events: List[dict], redis_client: aioredis.Redis):
-    """Вспомогательная функция для безопасного сброса битых данных в Dead Letter Queue"""
     try:
         batch_size = len(events)
         serialized_events = [json.dumps(event, default=str) for event in events]
@@ -91,7 +91,7 @@ async def worker_loop(worker_id: int, redis_client: aioredis.Redis):
             await asyncio.sleep(1)
 
 async def main():
-    redis_client = aioredis.from_url("redis://localhost:6379", decode_responses=True)
+    redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     logger.info(f"Запуск конвейера. Создаем {NUM_WORKERS} параллельных воркеров...")
     
     workers = [asyncio.create_task(worker_loop(worker_id=i, redis_client=redis_client)) for i in range(NUM_WORKERS)]
