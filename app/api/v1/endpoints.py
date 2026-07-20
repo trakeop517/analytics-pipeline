@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status, HTTPException, Depends
 from app.api.schemas import EventCreate
-from app.db.redis import get_redis_client # Подставь свой импорт клиента Redis, если он называется иначе
+from app.db.redis import get_redis_client 
 import json
 
 router = APIRouter()
@@ -13,5 +13,4 @@ async def produce_event(event: EventCreate, redis_client=Depends(get_redis_clien
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Failed to queue event: {str(e)}"
-        )
+            detail=f"Failed to queue event: {str(e)}")
