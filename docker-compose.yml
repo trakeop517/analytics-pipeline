@@ -1,6 +1,28 @@
 version: '3.8'
 
 services:
+  # --- 1. FastAPI App & Workers ---
+  app:
+    build: .
+    container_name: analytics_app
+    ports:
+      - "8001:8000"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=my_super_secret_password_123
+      - POSTGRES_DB=analytics_db
+      - POSTGRES_HOST=postgres_db
+      - POSTGRES_PORT=5432          
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379             
+      - WORKERS_COUNT=3
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
   postgres_db:
     image: postgres:15-alpine
     container_name: analytics_postgres
@@ -9,17 +31,52 @@ services:
       POSTGRES_PASSWORD: my_super_secret_password_123
       POSTGRES_DB: analytics_db
     ports:
-      - "5433:5432"
+      - "5433:5432"                
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: always
-
   redis:
     image: redis:7-alpine
     container_name: analytics_redis
     ports:
-      - "6380:6379"
+      - "6380:6379"                 
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: analytics_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    restart: always
+  grafana:
+    image: grafana/grafana:latest
+    container_name: analytics_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
     restart: always
 
 volumes:
   postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
