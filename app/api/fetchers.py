@@ -8,10 +8,7 @@ router = APIRouter(prefix="/fetchers/github", tags=["GitHub Fetcher"])
 async def fetch_github_once():
     try:
         count = await github_fetcher.fetch_and_push()
-        return {
-            "status": "success",
-            "message": f"Успешно заброшено {count} событий из GitHub в очередь Redis",
-            "pushed_events": count}
+        return {"status": "success", "message": f"Успешно заброшено {count} событий из GitHub в очередь Redis", "pushed_events": count}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -22,9 +19,7 @@ async def start_github_polling(interval: int = 10):
     started = github_fetcher.start_background_polling(interval_seconds=interval)
     if not started:
         return {"status": "warning", "message": "Фоновый опрос GitHub уже запущен и работает!"}
-    return {
-        "status": "success",
-        "message": f"Автоматическая откачка GitHub запущен (интервал: {interval} сек)"}
+    return {"status": "success", "message": f"Автоматическая откачка GitHub запущен (интервал: {interval} сек)"}
 
 @router.post("/stop")
 async def stop_github_polling():

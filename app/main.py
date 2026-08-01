@@ -14,31 +14,19 @@ from app.api.fetchers import router as fetchers_router
 from app.api.monitoring import router as monitoring
 from app.core.config import settings
 from app.db.session import async_engine, async_session_factory
-from app.metrics import (
-    ACTIVE_WORKERS_COUNT,
-    EVENTS_PROCESSED_TOTAL,
-    REDIS_DLQ_SIZE,
-    REDIS_QUEUE_SIZE,
-    WORKER_PROCESSING_LATENCY,
-    WORKER_RETRIES_TOTAL,
-)
+from app.metrics import (ACTIVE_WORKERS_COUNT,EVENTS_PROCESSED_TOTAL,REDIS_DLQ_SIZE,REDIS_QUEUE_SIZE,WORKER_PROCESSING_LATENCY,WORKER_RETRIES_TOTAL,)
 from app.models.event import Base, EventModel
 from app.services.github_fetcher import github_fetcher
 from app.services.hn_fetcher import hn_fetcher
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("main")
 
-QUEUE_NAME = "events_queue"
-DLQ_QUEUE_NAME = "dlq_events_queue"
+QUEUE_NAME = settings.QUEUE_NAME
+DLQ_QUEUE_NAME = settings.DLQ_QUEUE_NAME
 MAX_RETRIES = 3
 
-REDIS_URL = getattr(
-    settings, 
-    "REDIS_URL", 
-    f"redis://{getattr(settings, 'REDIS_HOST', '127.0.0.1')}:{getattr(settings, 'REDIS_PORT', 6379)}")
+REDIS_URL = getattr(settings, "REDIS_URL", f"redis://{getattr(settings, 'REDIS_HOST', '127.0.0.1')}:{getattr(settings, 'REDIS_PORT', 6379)}")
 app_state = {"workers": [], "redis": None, "metrics_task": None}
 
 async def redis_worker(worker_id: int):
@@ -59,13 +47,8 @@ async def redis_worker(worker_id: int):
                     source = task_data.get("source", "unknown")
                     logger.info(f"Worker-{worker_id} обрабатывает [{source}]: {task_data.get('title')}")
                     async with async_session_factory() as session:
-                        stmt = pg_insert(EventModel).values(
-                            source=source,
-                            external_id=str(task_data["external_id"]),
-                            title=task_data.get("title"),
-                            payload=task_data.get("payload", {}),
-                        ).on_conflict_do_nothing(
-                            index_elements=["source", "external_id"])
+                        stmt = pg_insert(EventModel).values(source=source, external_id=str(task_data["external_id"]), title=task_data.get("title"), payload=task_data.get("payload", {}),
+                        ).on_conflict_do_nothing(index_elements=["source", "external_id"])
                         await session.execute(stmt)
                         await session.commit()
                     EVENTS_PROCESSED_TOTAL.labels(source=source, status="success").inc()
@@ -115,7 +98,7 @@ async def lifespan(app: FastAPI):
     app_state["metrics_task"] = asyncio.create_task(update_metrics_loop())
     github_fetcher.start_background_polling(interval_seconds=60)
     hn_fetcher.start_background_polling(interval_seconds=30)
-    logger.info("✅ Фоновые фетчеры GitHub и Hacker News успешно запущены!")
+    logger.info("Фоновые фетчеры GitHub и Hacker News успешно запущены!")
     for i in range(settings.WORKERS_COUNT):
         task = asyncio.create_task(redis_worker(worker_id=i + 1))
         app_state["workers"].append(task)
@@ -158,14 +141,6 @@ async def get_analytics_summary():
         recent_query = select(EventModel).order_by(EventModel.created_at.desc()).limit(10)
         recent_res = await session.execute(recent_query)
         recent_events = recent_res.scalars().all()
-        return {
-            "total_events_in_db": total_count,
-            "by_source": stats_by_source,
-            "latest_events": [
-                {
-                    "source": ev.source,
-                    "external_id": ev.external_id,
-                    "title": ev.title,
-                    "created_at": ev.created_at.isoformat() if ev.created_at else None
-                }
+        return {"total_events_in_db": total_count, "by_source": stats_by_source, "latest_events": [
+                {"source": ev.source, "external_id": ev.external_id, "title": ev.title, "created_at": ev.created_at.isoformat() if ev.created_at else None}
                 for ev in recent_events]}

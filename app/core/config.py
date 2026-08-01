@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     def REDIS_URL(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
     WORKERS_COUNT: int = 3
+    QUEUE_NAME: str = "events_queue"
+    DLQ_QUEUE_NAME: str = "events:dlq"
     MAX_QUEUE_SIZE: int = 5000
     RATE_LIMIT_PER_MIN: int = 60  
 settings = Settings()

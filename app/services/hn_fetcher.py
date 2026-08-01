@@ -8,21 +8,14 @@ import redis.asyncio as redis
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
 HN_NEW_STORIES_URL = "https://hacker-news.firebaseio.com/v0/newstories.json"
 HN_ITEM_URL = "https://hacker-news.firebaseio.com/v0/item/{id}.json"
-QUEUE_NAME = "events_queue"
-
-REDIS_URL = getattr(
-    settings,
-    "REDIS_URL",
-    f"redis://{getattr(settings, 'REDIS_HOST', '127.0.0.1')}:{getattr(settings, 'REDIS_PORT', 6380)}")
+QUEUE_NAME = settings.QUEUE_NAME
 
 class HackerNewsFetcherService:
     def __init__(self):
         self._bg_task: Optional[asyncio.Task] = None
         self._is_running: bool = False
-
     async def _fetch_item(self, client: httpx.AsyncClient, item_id: int) -> Optional[Dict[str, Any]]:
         try:
             resp = await client.get(HN_ITEM_URL.format(id=item_id))
@@ -44,7 +37,7 @@ class HackerNewsFetcherService:
         valid_items = [item for item in raw_items if item and "id" in item]
         if not valid_items:
             return 0
-        redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
         pushed_count = 0
         try:
             pipeline = redis_client.pipeline()

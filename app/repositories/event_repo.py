@@ -9,13 +9,7 @@ class EventRepository:
         self.session = session
 
     async def create_event(self, event_data: EventCreate) -> EventModel:
-        db_event = EventModel(
-            source=event_data.source,
-            external_id=event_data.external_id,
-            title=event_data.title,
-            payload=event_data.payload,
-            created_at=event_data.created_at
-        )
+        db_event = EventModel(source=event_data.source, external_id=event_data.external_id, title=event_data.title, payload=event_data.payload, created_at=event_data.created_at)
         self.session.add(db_event)
         await self.session.commit()
         await self.session.refresh(db_event)

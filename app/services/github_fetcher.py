@@ -9,7 +9,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 GITHUB_EVENTS_URL = "https://api.github.com/events"
-QUEUE_NAME = "events_queue"
+QUEUE_NAME = settings.QUEUE_NAME
 class GitHubFetcherService:
     def __init__(self):
         self._bg_task: Optional[asyncio.Task] = None

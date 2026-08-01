@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # --- 1. FastAPI App & Workers ---
   app:
     build: .
     container_name: analytics_app
