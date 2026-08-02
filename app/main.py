@@ -1,20 +1,16 @@
 import asyncio
-import json
 import logging
-import time
 from contextlib import asynccontextmanager
-
 import redis.asyncio as redis
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
+from app.consumers.worker import worker_loop
 from app.api.fetchers import router as fetchers_router
 from app.api.monitoring import router as monitoring
 from app.core.config import settings
 from app.db.session import async_engine, async_session_factory
-from app.metrics import (ACTIVE_WORKERS_COUNT,EVENTS_PROCESSED_TOTAL,REDIS_DLQ_SIZE,REDIS_QUEUE_SIZE,WORKER_PROCESSING_LATENCY,WORKER_RETRIES_TOTAL,)
+from app.metrics import (REDIS_DLQ_SIZE,REDIS_QUEUE_SIZE)
 from app.models.event import Base, EventModel
 from app.services.github_fetcher import github_fetcher
 from app.services.hn_fetcher import hn_fetcher
@@ -24,58 +20,8 @@ logger = logging.getLogger("main")
 
 QUEUE_NAME = settings.QUEUE_NAME
 DLQ_QUEUE_NAME = settings.DLQ_QUEUE_NAME
-MAX_RETRIES = 3
-
 REDIS_URL = getattr(settings, "REDIS_URL", f"redis://{getattr(settings, 'REDIS_HOST', '127.0.0.1')}:{getattr(settings, 'REDIS_PORT', 6379)}")
 app_state = {"workers": [], "redis": None, "metrics_task": None}
-
-async def redis_worker(worker_id: int):
-    logger.info(f"Worker-{worker_id} (Redis) запущен.")
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-    try:
-        while True:
-            try:
-                res = await redis_client.blpop(QUEUE_NAME, timeout=2)
-                if not res:
-                    continue
-                _, raw_data = res
-                start_time = time.perf_counter()
-                ACTIVE_WORKERS_COUNT.inc()
-                task_data = None
-                try:
-                    task_data = json.loads(raw_data)
-                    source = task_data.get("source", "unknown")
-                    logger.info(f"Worker-{worker_id} обрабатывает [{source}]: {task_data.get('title')}")
-                    async with async_session_factory() as session:
-                        stmt = pg_insert(EventModel).values(source=source, external_id=str(task_data["external_id"]), title=task_data.get("title"), payload=task_data.get("payload", {}),
-                        ).on_conflict_do_nothing(index_elements=["source", "external_id"])
-                        await session.execute(stmt)
-                        await session.commit()
-                    EVENTS_PROCESSED_TOTAL.labels(source=source, status="success").inc()
-                    WORKER_PROCESSING_LATENCY.labels(source=source).observe(time.perf_counter() - start_time)
-                except Exception as e:
-                    logger.error(f"Ошибка воркера {worker_id} при записи: {e}")
-                    source = task_data.get("source", "unknown") if task_data else "unknown"
-                    retries = (task_data.get("retries", 0) + 1) if task_data else MAX_RETRIES + 1
-                    WORKER_RETRIES_TOTAL.labels(source=source).inc()
-                    if retries <= MAX_RETRIES and task_data:
-                        task_data["retries"] = retries
-                        await redis_client.rpush(QUEUE_NAME, json.dumps(task_data))
-                    else:
-                        EVENTS_PROCESSED_TOTAL.labels(source=source, status="failed").inc()
-                        await redis_client.rpush(DLQ_QUEUE_NAME, raw_data)
-                    await asyncio.sleep(1)
-                finally:
-                    ACTIVE_WORKERS_COUNT.dec()
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error(f"Системная ошибка воркера {worker_id}: {e}")
-                await asyncio.sleep(1)
-    except asyncio.CancelledError:
-        logger.info(f"Worker-{worker_id} остановлен.")
-    finally:
-        await redis_client.aclose()
 
 async def update_metrics_loop():
     while True:
@@ -100,7 +46,7 @@ async def lifespan(app: FastAPI):
     hn_fetcher.start_background_polling(interval_seconds=30)
     logger.info("Фоновые фетчеры GitHub и Hacker News успешно запущены!")
     for i in range(settings.WORKERS_COUNT):
-        task = asyncio.create_task(redis_worker(worker_id=i + 1))
+        task = asyncio.create_task(worker_loop(worker_id=i + 1, redis_client=app_state["redis"],))
         app_state["workers"].append(task)
     yield
     logger.info("Остановка приложения...")
